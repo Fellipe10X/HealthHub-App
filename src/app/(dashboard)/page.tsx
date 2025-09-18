@@ -267,17 +267,40 @@ const SummaryScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
 const ExamsScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file) {
-            console.log("Arquivo selecionado:", file.name);
-            setNotification(`Arquivo "${file.name}" selecionado!`);
-        }
-    };
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+        return;
+    }
 
-    const handleUploadClick = () => {
-        fileInputRef.current?.click();
-    };
+    try {
+        // 1. Get presigned URL from your API
+        const response = await fetch('/api/upload', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ filename: file.name, contentType: file.type }),
+        });
+
+        const { url } = await response.json();
+
+        // 2. Upload file directly to S3
+        await fetch(url, {
+            method: 'PUT',
+            body: file,
+            headers: {
+                'Content-Type': file.type,
+            },
+        });
+
+
+        setNotification(`Arquivo "${file.name}" enviado com sucesso!`);
+    } catch (error) {
+        console.error('Error uploading file:', error);
+        setNotification(`Erro ao enviar o arquivo.`);
+    }
+};
 
     return (
         <div className="bg-gradient-to-b from-teal-50 to-white min-h-screen">
@@ -393,12 +416,31 @@ const MedicationsScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
 
 
 // --- TELA DE ADICIONAR MEDICAMENTO ---
-const AddMedicationScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }) => {
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const form = e.target as HTMLFormElement;
+    const medName = (form.elements.namedItem('medName') as HTMLInputElement).value;
+    const medDosage = (form.elements.namedItem('medDosage') as HTMLInputElement).value;
+    const medFrequency = (form.elements.namedItem('medFrequency') as HTMLInputElement).value;
+    const medNotes = (form.elements.namedItem('medNotes') as HTMLTextAreaElement).value;
+
+
+    try {
+        await fetch('/api/medications', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ medName, medDosage, medFrequency, medNotes }),
+        });
+
         setNotification("Medicamento salvo com sucesso!");
         navigateTo('medications');
-    };
+    } catch (error) {
+        console.error('Error saving medication:', error);
+        setNotification("Erro ao salvar o medicamento.");
+    }
+};
 
     return (
         <div className="bg-gradient-to-b from-indigo-50 to-white min-h-screen">
@@ -442,6 +484,22 @@ const AddMedicationScreen: React.FC<ScreenProps> = ({ navigateTo, setNotificatio
 
 // --- TELA DE ALERGIAS ---
 const AllergiesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
+    const [allergies, setAllergies] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchAllergies = async () => {
+            try {
+                const response = await fetch('/api/allergies');
+                const data = await response.json();
+                setAllergies(data);
+            } catch (error) {
+                console.error('Error fetching allergies:', error);
+            }
+        };
+
+        fetchAllergies();
+    }, []);
+
     return (
         <div className="bg-gradient-to-b from-rose-50 to-white min-h-screen">
             <div className="p-6">
@@ -453,10 +511,77 @@ const AllergiesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
                 </header>
                 
                 <div className="space-y-4 pb-24">
-                     <div className="bg-white p-4 rounded-2xl shadow-md text-center">
-                        <p className="text-slate-600">Nenhuma alergia conhecida registrada.</p>
-                        <p className="text-sm text-slate-400 mt-1">Adicione alergias para manter seu histórico completo.</p>
-                     </div>
+                    {allergies.length === 0 ? (
+                        <div className="bg-white p-4 rounded-2xl shadow-md text-center">
+                            <p className="text-slate-600">Nenhuma alergia conhecida registrada.</p>
+                            <p className="text-sm text-slate-400 mt-1">Adicione alergias para manter seu histórico completo.</p>
+                        </div>
+                    ) : (
+                        allergies.map((allergy) => (
+                            <div key={allergy.id} className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between">
+                                <div>
+                                    <p className="font-bold text-slate-800">{allergy.name}</p>
+                                    <p className="text-sm text-slate-500">{allergy.severity}</p>
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+
+            <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md p-6 bg-white/80 backdrop-blur-sm border-t border-gray-200/80">
+                 <button onClick={() => navigateTo('addAllergy')} className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-rose-500/30 transition duration-300">
+                    + Adicionar Alergia
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// --- TELA DE ALERGIAS ---
+const AllergiesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
+    const [allergies, setAllergies] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchAllergies = async () => {
+            try {
+                const response = await fetch('/api/allergies');
+                const data = await response.json();
+                setAllergies(data);
+            } catch (error) {
+                console.error('Error fetching allergies:', error);
+            }
+        };
+
+        fetchAllergies();
+    }, []);
+
+    return (
+        <div className="bg-gradient-to-b from-rose-50 to-white min-h-screen">
+            <div className="p-6">
+                <header className="flex items-center mb-8 relative">
+                    <button onClick={() => navigateTo('summary')} className="absolute left-0">
+                       <BackIcon />
+                    </button>
+                    <h1 className="text-3xl font-bold text-slate-800 text-center w-full">Alergias</h1>
+                </header>
+                
+                <div className="space-y-4 pb-24">
+                    {allergies.length === 0 ? (
+                        <div className="bg-white p-4 rounded-2xl shadow-md text-center">
+                            <p className="text-slate-600">Nenhuma alergia conhecida registrada.</p>
+                            <p className="text-sm text-slate-400 mt-1">Adicione alergias para manter seu histórico completo.</p>
+                        </div>
+                    ) : (
+                        allergies.map((allergy) => (
+                            <div key={allergy.id} className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between">
+                                <div>
+                                    <p className="font-bold text-slate-800">{allergy.name}</p>
+                                    <p className="text-sm text-slate-500">{allergy.severity}</p>
+                                </div>
+                            </div>
+                        ))
+                    )}
                 </div>
             </div>
 
@@ -471,10 +596,27 @@ const AllergiesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
 
 // --- TELA DE ADICIONAR ALERGIA ---
 const AddAllergyScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }) => {
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setNotification("Alergia salva com sucesso!");
-        navigateTo('allergies');
+        const form = e.target as HTMLFormElement;
+        const allergyName = (form.elements.namedItem('allergyName') as HTMLInputElement).value;
+        const allergySeverity = (form.elements.namedItem('allergySeverity') as HTMLSelectElement).value;
+        const allergySymptoms = (form.elements.namedItem('allergySymptoms') as HTMLTextAreaElement).value;
+
+        try {
+            await fetch('/api/allergies', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ allergyName, allergySeverity, allergySymptoms }),
+            });
+            setNotification("Alergia salva com sucesso!");
+            navigateTo('allergies');
+        } catch (error) {
+            console.error('Error saving allergy:', error);
+            setNotification("Erro ao salvar a alergia.");
+        }
     };
 
     return (
@@ -490,11 +632,11 @@ const AddAllergyScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }
                 <form onSubmit={handleSubmit} className="space-y-6 pb-24">
                     <div>
                         <label htmlFor="allergyName" className="block text-sm font-medium text-slate-700 mb-1">Nome da Alergia</label>
-                        <input type="text" id="allergyName" className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-rose-500 focus:border-rose-500" placeholder="Ex: Penicilina, Camarão" required />
+                        <input type="text" id="allergyName" name="allergyName" className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-rose-500 focus:border-rose-500" placeholder="Ex: Penicilina, Camarão" required />
                     </div>
                      <div>
                         <label htmlFor="allergySeverity" className="block text-sm font-medium text-slate-700 mb-1">Gravidade</label>
-                        <select id="allergySeverity" className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-rose-500 focus:border-rose-500">
+                        <select id="allergySeverity" name="allergySeverity" className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-rose-500 focus:border-rose-500">
                             <option>Leve</option>
                             <option>Moderada</option>
                             <option>Grave</option>
@@ -502,13 +644,19 @@ const AddAllergyScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }
                     </div>
                      <div>
                         <label htmlFor="allergySymptoms" className="block text-sm font-medium text-slate-700 mb-1">Sintomas / Reações</label>
-                        <textarea id="allergySymptoms" rows={3} className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-rose-500 focus:border-rose-500" placeholder="Ex: Urticária, inchaço, dificuldade para respirar."></textarea>
+                        <textarea id="allergySymptoms" name="allergySymptoms" rows={3} className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-rose-500 focus:border-rose-500" placeholder="Ex: Urticária, inchaço, dificuldade para respirar."></textarea>
                     </div>
+                     <button type="submit" className="hidden">Salvar</button> {/* Botão oculto para o submit do formulário */}
                 </form>
             </div>
 
             <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md p-6 bg-white/80 backdrop-blur-sm border-t border-gray-200/80">
-                 <button onClick={handleSubmit} className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-rose-500/30 transition duration-300">
+                 <button onClick={(e) => {
+                     const form = document.querySelector('form');
+                     if(form) {
+                        form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                     }
+                 }} className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-rose-500/30 transition duration-300">
                     Salvar Alergia
                 </button>
             </div>
@@ -519,6 +667,23 @@ const AddAllergyScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }
 
 // --- TELA DE CIRURGIAS ---
 const SurgeriesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
+    const [surgeries, setSurgeries] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchSurgeries = async () => {
+            try {
+                const response = await fetch('/api/surgeries');
+                const data = await response.json();
+                setSurgeries(data);
+            } catch (error) {
+                console.error('Error fetching surgeries:', error);
+            }
+        };
+
+        fetchSurgeries();
+    }, []);
+
+
     return (
         <div className="bg-gradient-to-b from-sky-50 to-white min-h-screen">
             <div className="p-6">
@@ -530,18 +695,21 @@ const SurgeriesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
                 </header>
                 
                 <div className="space-y-4 pb-24">
-                     <div className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
-                        <div className="flex items-center">
-                            <div className="bg-sky-100 text-sky-600 p-3 rounded-lg mr-4">
-                                <SurgeriesIcon />
-                            </div>
-                            <div>
-                                <p className="font-bold text-slate-800">Apendicectomia</p>
-                                <p className="text-sm text-slate-500">15 de Junho, 2018</p>
-                            </div>
+                    {surgeries.length === 0 ? (
+                        <div className="bg-white p-4 rounded-2xl shadow-md text-center">
+                            <p className="text-slate-600">Nenhuma cirurgia registrada.</p>
+                            <p className="text-sm text-slate-400 mt-1">Adicione cirurgias para manter seu histórico completo.</p>
                         </div>
-                        <ForwardIcon />
-                    </div>
+                    ) : (
+                        surgeries.map((surgery) => (
+                            <div key={surgery.id} className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between">
+                                <div>
+                                    <p className="font-bold text-slate-800">{surgery.name}</p>
+                                    <p className="text-sm text-slate-500">{new Date(surgery.date).toLocaleDateString()}</p>
+                                </div>
+                            </div>
+                        ))
+                    )}
                 </div>
             </div>
 
@@ -557,10 +725,28 @@ const SurgeriesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
 
 // --- TELA DE ADICIONAR CIRURGIA ---
 const AddSurgeryScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }) => {
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setNotification("Cirurgia salva com sucesso!");
-        navigateTo('surgeries');
+        const form = e.target as HTMLFormElement;
+        const surgeryName = (form.elements.namedItem('surgeryName') as HTMLInputElement).value;
+        const surgeryDate = (form.elements.namedItem('surgeryDate') as HTMLInputElement).value;
+        const surgeryDoctor = (form.elements.namedItem('surgeryDoctor') as HTMLInputElement).value;
+        const surgeryNotes = (form.elements.namedItem('surgeryNotes') as HTMLTextAreaElement).value;
+        
+        try {
+            await fetch('/api/surgeries', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ surgeryName, surgeryDate, surgeryDoctor, surgeryNotes }),
+            });
+            setNotification("Cirurgia salva com sucesso!");
+            navigateTo('surgeries');
+        } catch (error) {
+            console.error('Error saving surgery:', error);
+            setNotification("Erro ao salvar a cirurgia.");
+        }
     };
 
     return (
@@ -576,29 +762,31 @@ const AddSurgeryScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }
                 <form onSubmit={handleSubmit} className="space-y-6 pb-24">
                     <div>
                         <label htmlFor="surgeryName" className="block text-sm font-medium text-slate-700 mb-1">Nome do Procedimento</label>
-                        <input type="text" id="surgeryName" className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-sky-500 focus:border-sky-500" placeholder="Ex: Apendicectomia" required />
+                        <input type="text" id="surgeryName" name="surgeryName" className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-sky-500 focus:border-sky-500" placeholder="Ex: Apendicectomia" required />
                     </div>
                      <div>
                         <label htmlFor="surgeryDate" className="block text-sm font-medium text-slate-700 mb-1">Data</label>
-                        <input type="date" id="surgeryDate" className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-sky-500 focus:border-sky-500" />
-                    </div>
-                    <div>
-                        <label htmlFor="surgeryTime" className="block text-sm font-medium text-slate-700 mb-1">Horário</label>
-                        <input type="time" id="surgeryTime" className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-sky-500 focus:border-sky-500" />
+                        <input type="date" id="surgeryDate" name="surgeryDate" className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-sky-500 focus:border-sky-500" />
                     </div>
                      <div>
                         <label htmlFor="surgeryDoctor" className="block text-sm font-medium text-slate-700 mb-1">Médico / Hospital</label>
-                        <input type="text" id="surgeryDoctor" className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-sky-500 focus:border-sky-500" placeholder="Ex: Dr. João / Hospital Central" />
+                        <input type="text" id="surgeryDoctor" name="surgeryDoctor" className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-sky-500 focus:border-sky-500" placeholder="Ex: Dr. João / Hospital Central" />
                     </div>
                      <div>
                         <label htmlFor="surgeryNotes" className="block text-sm font-medium text-slate-700 mb-1">Observações</label>
-                        <textarea id="surgeryNotes" rows={3} className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-sky-500 focus:border-sky-500" placeholder="Ex: Procedimento ocorreu sem complicações."></textarea>
+                        <textarea id="surgeryNotes" name="surgeryNotes" rows={3} className="w-full border-slate-300 rounded-lg shadow-sm focus:ring-sky-500 focus:border-sky-500" placeholder="Ex: Procedimento ocorreu sem complicações."></textarea>
                     </div>
+                    <button type="submit" className="hidden">Salvar</button> {/* Botão oculto para o submit do formulário */}
                 </form>
             </div>
 
             <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md p-6 bg-white/80 backdrop-blur-sm border-t border-gray-200/80">
-                 <button onClick={handleSubmit} className="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-sky-500/30 transition duration-300">
+                 <button onClick={(e) => {
+                     const form = document.querySelector('form');
+                     if(form) {
+                        form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                     }
+                 }} className="w-full bg-sky-500 hover:bg-sky-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-sky-500/30 transition duration-300">
                     Salvar Cirurgia
                 </button>
             </div>
