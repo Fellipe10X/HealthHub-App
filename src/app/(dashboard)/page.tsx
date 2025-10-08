@@ -1,6 +1,6 @@
 "use client";
 
-import { UserButton, useUser } from '@clerk/nextjs';
+import { UserButton, useUser, useAuth, useClerk } from '@clerk/nextjs';
 import React, { useState, useRef, useEffect } from 'react';
 
 // --- TIPOS ---
@@ -129,9 +129,10 @@ const XRayIcon = () => (
 // };
 
 // --- TELA HOME ---
-// adicionei a const de user para puxar o usuario logado pelo Clerk, conseguindo assim puxar seu nome e exibir na tela juntamente com o icone de perfil (UserButton)
 const HomeScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
     const { user, isLoaded } = useUser();
+    const { signOut } = useClerk();
+
     return (
         <div className="bg-gradient-to-b from-teal-50 via-cyan-50 to-white min-h-screen p-6">
             <header className="flex justify-between items-center mb-8">
@@ -184,7 +185,11 @@ const HomeScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
                     </div>
                     <p className="font-semibold text-slate-800">Compartilhar com Médico</p>
                 </button>
-                <button className="bg-white p-4 rounded-2xl shadow-md text-left hover:bg-gray-50 transition" onClick={() => navigateTo('login')}>
+                {/* ALTERAÇÃO FEITA AQUI */}
+                <button 
+                    className="bg-white p-4 rounded-2xl shadow-md text-left hover:bg-gray-50 transition" 
+                    onClick={() => signOut({ redirectUrl: '/sign-up' })}
+                >
                     <div className="bg-slate-100 text-slate-600 p-2 rounded-lg inline-block mb-3">
                        <LogoutIcon />
                     </div>
@@ -268,43 +273,47 @@ const ExamsScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }) => 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-        return;
-    }
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
 
-    try {
-        // 1. Get presigned URL from your API
-        const response = await fetch('/api/upload', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ filename: file.name, contentType: file.type }),
-        });
+        try {
+            // 1. Get presigned URL from your API
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ filename: file.name, contentType: file.type }),
+            });
 
-        const { url } = await response.json();
+            const { url } = await response.json();
 
-        // 2. Upload file directly to S3
-        await fetch(url, {
-            method: 'PUT',
-            body: file,
-            headers: {
-                'Content-Type': file.type,
-            },
-        });
+            // 2. Upload file directly to S3
+            await fetch(url, {
+                method: 'PUT',
+                body: file,
+                headers: {
+                    'Content-Type': file.type,
+                },
+            });
 
+            setNotification(`Arquivo "${file.name}" enviado com sucesso!`);
+        } catch (error) {
+            console.error('Error uploading file:', error);
+            setNotification(`Erro ao enviar o arquivo.`);
+        }
+    };
 
-        setNotification(`Arquivo "${file.name}" enviado com sucesso!`);
-    } catch (error) {
-        console.error('Error uploading file:', error);
-        setNotification(`Erro ao enviar o arquivo.`);
-    }
-};
+    // ADICIONE ESTA FUNÇÃO AQUI
+    const handleUploadClick = () => {
+        fileInputRef.current?.click();
+    };
 
     return (
         <div className="bg-gradient-to-b from-teal-50 to-white min-h-screen">
-             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
             <div className="p-6">
                 <header className="flex items-center mb-8 relative">
                     <button onClick={() => navigateTo('summary')} className="absolute left-0">
@@ -313,59 +322,8 @@ const ExamsScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }) => 
                     <h1 className="text-3xl font-bold text-slate-800 text-center w-full">Exames</h1>
                 </header>
                 
-                <div className="space-y-4 pb-24">
-                    <div className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
-                        <div className="flex items-center">
-                            <div className="bg-teal-100 text-teal-600 p-3 rounded-lg mr-4">
-                                <MedicalDocumentIcon />
-                            </div>
-                            <div>
-                                <p className="font-bold text-slate-800">Exame de Sangue</p>
-                                <p className="text-sm text-slate-500">20 de Março, 2024</p>
-                            </div>
-                        </div>
-                        <ForwardIcon />
-                    </div>
+                {/* ... resto do seu JSX ... */}
 
-                    <div className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
-                        <div className="flex items-center">
-                            <div className="bg-indigo-100 text-indigo-600 p-3 rounded-lg mr-4">
-                               <TomographyIcon />
-                            </div>
-                            <div>
-                                <p className="font-bold text-slate-800">Tomografia</p>
-                                <p className="text-sm text-slate-500">5 de Fevereiro, 2024</p>
-                            </div>
-                        </div>
-                        <ForwardIcon />
-                    </div>
-                    
-                    <div className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
-                        <div className="flex items-center">
-                            <div className="bg-amber-100 text-amber-600 p-3 rounded-lg mr-4">
-                                <UrineTestIcon />
-                            </div>
-                            <div>
-                                <p className="font-bold text-slate-800">Exame de Urina</p>
-                                <p className="text-sm text-slate-500">12 de Janeiro, 2024</p>
-                            </div>
-                        </div>
-                        <ForwardIcon />
-                    </div>
-
-                    <div className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
-                        <div className="flex items-center">
-                            <div className="bg-rose-100 text-rose-600 p-3 rounded-lg mr-4">
-                               <XRayIcon />
-                            </div>
-                            <div>
-                                <p className="font-bold text-slate-800">Raio-X</p>
-                                <p className="text-sm text-slate-500">30 de Outubro, 2023</p>
-                            </div>
-                        </div>
-                        <ForwardIcon />
-                    </div>
-                </div>
             </div>
 
             <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md p-6 bg-white/80 backdrop-blur-sm border-t border-gray-200/80">
@@ -378,7 +336,44 @@ const ExamsScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }) => 
 };
 
 // --- TELA DE MEDICAMENTOS ---
-const MedicationsScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
+const MedicationsScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }) => {
+    const [medications, setMedications] = useState<any[]>([]);
+    const { getToken } = useAuth(); 
+
+    useEffect(() => {
+        const fetchMedications = async () => {
+            try {
+                const authToken = await getToken();
+                
+                // --- DEBUG: Verifique o token no console do navegador ---
+                console.log("Token de autenticação gerado:", authToken);
+
+                if (!authToken) {
+                    throw new Error("Token de autenticação não encontrado. O usuário está logado?");
+                }
+
+                const response = await fetch('/api/medications', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Falha ao buscar medicamentos: ${errorText}`);
+                }
+
+                const data = await response.json();
+                setMedications(data);
+            } catch (error) {
+                console.error('Erro detalhado em fetchMedications:', error);
+                setNotification(error instanceof Error ? error.message : "Erro ao buscar dados.");
+            }
+        };
+
+        fetchMedications();
+    }, [getToken, setNotification]);
+
     return (
         <div className="bg-gradient-to-b from-indigo-50 to-white min-h-screen">
             <div className="p-6">
@@ -390,18 +385,27 @@ const MedicationsScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
                 </header>
                 
                 <div className="space-y-4 pb-24">
-                    <div className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
-                        <div className="flex items-center">
-                            <div className="bg-indigo-100 text-indigo-600 p-3 rounded-lg mr-4">
-                                <MedicationsIcon />
-                            </div>
-                            <div>
-                                <p className="font-bold text-slate-800">Lisinopril</p>
-                                <p className="text-sm text-slate-500">10 mg, uma vez ao dia</p>
-                            </div>
+                    {medications.length === 0 ? (
+                         <div className="bg-white p-4 rounded-2xl shadow-md text-center">
+                            <p className="text-slate-600">Nenhum medicamento registrado.</p>
+                            <p className="text-sm text-slate-400 mt-1">Adicione medicamentos para manter seu histórico completo.</p>
                         </div>
-                        <ForwardIcon />
-                    </div>
+                    ) : (
+                        medications.map(med => (
+                            <div key={med.id} className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between cursor-pointer hover:bg-gray-50 transition">
+                                <div className="flex items-center">
+                                    <div className="bg-indigo-100 text-indigo-600 p-3 rounded-lg mr-4">
+                                        <MedicationsIcon />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800">{med.name}</p>
+                                        <p className="text-sm text-slate-500">{med.dosage}, {med.frequency}</p>
+                                    </div>
+                                </div>
+                                <ForwardIcon />
+                            </div>
+                        ))
+                    )}
                 </div>
             </div>
 
@@ -416,31 +420,33 @@ const MedicationsScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
 
 
 // --- TELA DE ADICIONAR MEDICAMENTO ---
-const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const form = e.target as HTMLFormElement;
-    const medName = (form.elements.namedItem('medName') as HTMLInputElement).value;
-    const medDosage = (form.elements.namedItem('medDosage') as HTMLInputElement).value;
-    const medFrequency = (form.elements.namedItem('medFrequency') as HTMLInputElement).value;
-    const medNotes = (form.elements.namedItem('medNotes') as HTMLTextAreaElement).value;
+const AddMedicationScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }) => {
+    
+    // MOVA A FUNÇÃO PARA CÁ
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const form = e.target as HTMLFormElement;
+        const medName = (form.elements.namedItem('medName') as HTMLInputElement).value;
+        const medDosage = (form.elements.namedItem('medDosage') as HTMLInputElement).value;
+        const medFrequency = (form.elements.namedItem('medFrequency') as HTMLInputElement).value;
+        const medNotes = (form.elements.namedItem('medNotes') as HTMLTextAreaElement).value;
 
+        try {
+            await fetch('/api/medications', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ medName, medDosage, medFrequency, medNotes }),
+            });
 
-    try {
-        await fetch('/api/medications', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ medName, medDosage, medFrequency, medNotes }),
-        });
-
-        setNotification("Medicamento salvo com sucesso!");
-        navigateTo('medications');
-    } catch (error) {
-        console.error('Error saving medication:', error);
-        setNotification("Erro ao salvar o medicamento.");
-    }
-};
+            setNotification("Medicamento salvo com sucesso!");
+            navigateTo('medications');
+        } catch (error) {
+            console.error('Error saving medication:', error);
+            setNotification("Erro ao salvar o medicamento.");
+        }
+    };
 
     return (
         <div className="bg-gradient-to-b from-indigo-50 to-white min-h-screen">
@@ -452,6 +458,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                     <h1 className="text-2xl font-bold text-slate-800 text-center w-full">Novo Medicamento</h1>
                 </header>
                 
+                {/* O formulário agora usa o onClick no botão de salvar para chamar o handleSubmit */}
                 <form onSubmit={handleSubmit} className="space-y-6 pb-24">
                     <div>
                         <label htmlFor="medName" className="block text-sm font-medium text-slate-700 mb-1">Nome do Medicamento</label>
@@ -473,7 +480,8 @@ const handleSubmit = async (e: React.FormEvent) => {
             </div>
 
             <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md p-6 bg-white/80 backdrop-blur-sm border-t border-gray-200/80">
-                 <button onClick={handleSubmit} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-500/30 transition duration-300">
+                 {/* O botão agora dispara o submit do formulário */}
+                 <button type="submit" form="add-medication-form" onClick={handleSubmit} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-500/30 transition duration-300">
                     Salvar Medicamento
                 </button>
             </div>
@@ -482,23 +490,45 @@ const handleSubmit = async (e: React.FormEvent) => {
 };
 
 
+
 // --- TELA DE ALERGIAS ---
-const AllergiesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
+const AllergiesScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }) => {
     const [allergies, setAllergies] = useState<any[]>([]);
+    const { getToken } = useAuth();
 
     useEffect(() => {
         const fetchAllergies = async () => {
             try {
-                const response = await fetch('/api/allergies');
+                const authToken = await getToken();
+                const response = await fetch('/api/allergies', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                // Se a resposta da API não for bem-sucedida, vamos capturar mais detalhes
+                if (!response.ok) {
+                    const errorBody = await response.text(); // Pega o corpo do erro como texto
+                    console.error('Erro na resposta da API:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        body: errorBody,
+                    });
+                    // Lança um erro mais detalhado
+                    throw new Error(`HTTP ${response.status}: ${errorBody || response.statusText}`);
+                }
+
                 const data = await response.json();
                 setAllergies(data);
             } catch (error) {
-                console.error('Error fetching allergies:', error);
+                console.error('Falha detalhada ao buscar alergias:', error);
+                // Mostra uma notificação de erro para o usuário
+                setNotification(error instanceof Error ? error.message : "Erro ao buscar dados.");
             }
         };
 
         fetchAllergies();
-    }, []);
+    },  [getToken]);
 
     return (
         <div className="bg-gradient-to-b from-rose-50 to-white min-h-screen">
@@ -518,67 +548,17 @@ const AllergiesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
                         </div>
                     ) : (
                         allergies.map((allergy) => (
-                            <div key={allergy.id} className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between">
-                                <div>
-                                    <p className="font-bold text-slate-800">{allergy.name}</p>
-                                    <p className="text-sm text-slate-500">{allergy.severity}</p>
+                           <div key={allergy.id} className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between">
+                                <div className="flex items-center">
+                                    <div className="bg-rose-100 text-rose-600 p-3 rounded-lg mr-4">
+                                       <AllergiesIcon />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800">{allergy.name}</p>
+                                        <p className="text-sm text-slate-500">Gravidade: {allergy.severity}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-
-            <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md p-6 bg-white/80 backdrop-blur-sm border-t border-gray-200/80">
-                 <button onClick={() => navigateTo('addAllergy')} className="w-full bg-rose-500 hover:bg-rose-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-rose-500/30 transition duration-300">
-                    + Adicionar Alergia
-                </button>
-            </div>
-        </div>
-    );
-};
-
-// --- TELA DE ALERGIAS ---
-const AllergiesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
-    const [allergies, setAllergies] = useState<any[]>([]);
-
-    useEffect(() => {
-        const fetchAllergies = async () => {
-            try {
-                const response = await fetch('/api/allergies');
-                const data = await response.json();
-                setAllergies(data);
-            } catch (error) {
-                console.error('Error fetching allergies:', error);
-            }
-        };
-
-        fetchAllergies();
-    }, []);
-
-    return (
-        <div className="bg-gradient-to-b from-rose-50 to-white min-h-screen">
-            <div className="p-6">
-                <header className="flex items-center mb-8 relative">
-                    <button onClick={() => navigateTo('summary')} className="absolute left-0">
-                       <BackIcon />
-                    </button>
-                    <h1 className="text-3xl font-bold text-slate-800 text-center w-full">Alergias</h1>
-                </header>
-                
-                <div className="space-y-4 pb-24">
-                    {allergies.length === 0 ? (
-                        <div className="bg-white p-4 rounded-2xl shadow-md text-center">
-                            <p className="text-slate-600">Nenhuma alergia conhecida registrada.</p>
-                            <p className="text-sm text-slate-400 mt-1">Adicione alergias para manter seu histórico completo.</p>
-                        </div>
-                    ) : (
-                        allergies.map((allergy) => (
-                            <div key={allergy.id} className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between">
-                                <div>
-                                    <p className="font-bold text-slate-800">{allergy.name}</p>
-                                    <p className="text-sm text-slate-500">{allergy.severity}</p>
-                                </div>
+                                <ForwardIcon />
                             </div>
                         ))
                     )}
@@ -668,11 +648,21 @@ const AddAllergyScreen: React.FC<ScreenProps> = ({ navigateTo, setNotification }
 // --- TELA DE CIRURGIAS ---
 const SurgeriesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
     const [surgeries, setSurgeries] = useState<any[]>([]);
+    const { getToken } = useAuth(); // Importar hook de autenticação
 
     useEffect(() => {
         const fetchSurgeries = async () => {
             try {
-                const response = await fetch('/api/surgeries');
+                const authToken = await getToken(); // Obter token
+                const response = await fetch('/api/surgeries', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}` // Enviar token
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Falha ao buscar cirurgias.');
+                }
                 const data = await response.json();
                 setSurgeries(data);
             } catch (error) {
@@ -681,7 +671,7 @@ const SurgeriesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
         };
 
         fetchSurgeries();
-    }, []);
+    }, [getToken]); // Adicionar getToken como dependência do useEffect
 
 
     return (
@@ -703,10 +693,16 @@ const SurgeriesScreen: React.FC<ScreenProps> = ({ navigateTo }) => {
                     ) : (
                         surgeries.map((surgery) => (
                             <div key={surgery.id} className="bg-white p-4 rounded-2xl shadow-md flex items-center justify-between">
-                                <div>
-                                    <p className="font-bold text-slate-800">{surgery.name}</p>
-                                    <p className="text-sm text-slate-500">{new Date(surgery.date).toLocaleDateString()}</p>
+                                <div className="flex items-center">
+                                    <div className="bg-sky-100 text-sky-600 p-3 rounded-lg mr-4">
+                                        <SurgeriesIcon />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800">{surgery.name}</p>
+                                        <p className="text-sm text-slate-500">{new Date(surgery.date).toLocaleDateString()}</p>
+                                    </div>
                                 </div>
+                                <ForwardIcon />
                             </div>
                         ))
                     )}

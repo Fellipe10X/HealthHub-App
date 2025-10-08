@@ -27,17 +27,21 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
     const { userId } = auth();
     if (!userId) {
+        console.log("API /api/allergies: Acesso bloqueado - Usuário não autenticado.");
         return new Response("Unauthorized", { status: 401 });
     }
+
+    console.log(`API /api/allergies: Recebida requisição do usuário ${userId}`);
 
     try {
         const allergies = await pool.query(
             'SELECT * FROM allergies WHERE user_id = $1',
             [userId]
         );
+        console.log(`API /api/allergies: Consulta ao banco de dados bem-sucedida. Encontrados ${allergies.rows.length} registros.`);
         return NextResponse.json(allergies.rows);
     } catch (error) {
-        console.error('Error fetching allergies:', error);
-        return NextResponse.json({ error: 'Error fetching allergies' }, { status: 500 });
+        console.error('ERRO CRÍTICO na API /api/allergies:', error);
+        return NextResponse.json({ error: 'Erro interno no servidor ao buscar alergias' }, { status: 500 });
     }
 }
